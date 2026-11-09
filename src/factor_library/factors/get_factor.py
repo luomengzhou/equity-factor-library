@@ -451,6 +451,7 @@ def get_factor(
             base_parquet=base_parquet,
             use_precomputed_step2=use_precomputed_step2,
             membership_parquet=membership_parquet,
+            winsorize_bounds=winsorize_bounds,
         )
         if cached is not None and len(cached) > 0:
             return cached
@@ -496,6 +497,7 @@ def get_factor(
             base_parquet=base_parquet,
             use_precomputed_step2=use_precomputed_step2,
             membership_parquet=membership_parquet,
+            winsorize_bounds=winsorize_bounds,
         )
 
     return out.reset_index(drop=True)

@@ -34,6 +34,7 @@ def _make_cache_key(
     base_parquet: Path | str | None = None,
     use_precomputed_step2: bool = True,
     membership_parquet: Path | str | None = None,
+    winsorize_bounds: tuple[float, float] | None = None,
 ) -> str:
     base_key = None
     if base_parquet is not None:
@@ -49,6 +50,10 @@ def _make_cache_key(
         "rank_method": rank_method,
         "composite_method": composite_method,
         "winsorize": winsorize,
+        "winsorize_bounds": (
+            [float(winsorize_bounds[0]), float(winsorize_bounds[1])]
+            if winsorize and winsorize_bounds is not None else None
+        ),
         "base_parquet": base_key,
         "use_precomputed_step2": use_precomputed_step2,
         "membership_parquet": mem_key,
@@ -93,6 +98,7 @@ def get_cached_factor(
     base_parquet: Path | str | None = None,
     use_precomputed_step2: bool = True,
     membership_parquet: Path | str | None = None,
+    winsorize_bounds: tuple[float, float] | None = None,
 ) -> pd.DataFrame | None:
     path = get_cache_path(cache_dir, _make_cache_key(
         universe, factor_name, start_date, end_date,
@@ -100,6 +106,7 @@ def get_cached_factor(
         base_parquet=base_parquet,
         use_precomputed_step2=use_precomputed_step2,
         membership_parquet=membership_parquet,
+        winsorize_bounds=winsorize_bounds,
     ))
     return read_from_cache(path)
 
@@ -118,6 +125,7 @@ def save_factor_to_cache(
     base_parquet: Path | str | None = None,
     use_precomputed_step2: bool = True,
     membership_parquet: Path | str | None = None,
+    winsorize_bounds: tuple[float, float] | None = None,
 ) -> Path:
     path = get_cache_path(cache_dir, _make_cache_key(
         universe, factor_name, start_date, end_date,
@@ -125,6 +133,7 @@ def save_factor_to_cache(
         base_parquet=base_parquet,
         use_precomputed_step2=use_precomputed_step2,
         membership_parquet=membership_parquet,
+        winsorize_bounds=winsorize_bounds,
     ))
     write_to_cache(df, path)
     return path
