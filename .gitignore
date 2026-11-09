@@ -7,3 +7,6 @@ __pycache__/
 /runtime/
 *.parquet
 *.xlsx
+/experiments/results/
+/docs/gallery/
+.pytest_cache/
