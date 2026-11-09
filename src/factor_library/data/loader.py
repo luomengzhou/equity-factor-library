@@ -6,7 +6,9 @@ Core responsibilities:
 2) Optionally enrich panel with required DB metrics per factor metric_keys
 3) All file inputs come from ``final/data/`` only (no other Week* folders).
 
-DB access uses ``columbia_factor_library`` (requires AWS/boto3 credentials when enabled).
+Optional DB access uses ``columbia_factor_library`` — internal data-access helpers,
+not distributed; see README Data section. Every import is guarded and the loader
+falls back to the local panel / yfinance when they are missing.
 """
 from __future__ import annotations
 
@@ -24,11 +26,11 @@ from factor_library.config import (
     FUNDAMENTAL_REPORT_LAG_DAYS,
     PART1_FILE,
     PART2_FILE,
+    PRICE_TABLE,
     STEP1_EXTENDED_PARQUET,
     STEP1_MERGED_PARQUET,
 )
 
-# ``columbia_factor_library`` lives alongside this package under ``app/src/``.
 
 # metric_key -> db table keys (table_fsym_mapping.METRIC_TABLES)
 METRIC_KEY_TO_TABLE_KEYS: dict[str, list[str]] = {
@@ -192,7 +194,7 @@ def load_prices() -> pd.DataFrame:
         if result is not None:
             return result[0]
     raise FileNotFoundError(
-        "No usable prices sheet found. Place MQ_top100_metrics_part1.xlsx / part2.xlsx "
+        "No usable prices sheet found. Place metrics_part1.xlsx / metrics_part2.xlsx "
         f"under {DATA_DIR}."
     )
 
@@ -255,7 +257,11 @@ def _load_metric_table_with_fallback_ids(
     1) Query using primary IDs (-R)
     2) If empty, map to fsym_id (-S) via symbol_coverage and query again
     """
-    from columbia_factor_library.factor_data_access import get_metric_table
+    try:
+        # Internal data-access helpers, not distributed; see README Data section.
+        from columbia_factor_library.factor_data_access import get_metric_table
+    except ImportError:
+        return pd.DataFrame()
 
     primary_ids = list(dict.fromkeys([str(x) for x in primary_ids]))
     cov = load_symbol_coverage()
@@ -531,7 +537,7 @@ def load_volume(
     end_date: str | pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     """
-    Load daily volume from DB (mapping.merq_prices), aggregated by fsym_id/date.
+    Load daily volume from the DB price table (``PRICE_TABLE``), aggregated by fsym_id/date.
     Returns columns: fsym_primary_listing_id, volume_date, volume, db_price, high_price, low_price
     """
     cov = load_symbol_coverage()
@@ -557,21 +563,31 @@ def load_volume(
         )
 
     try:
-        from sqlalchemy import text
+        # Internal data-access helpers, not distributed; see README Data section.
         from columbia_factor_library.db1_query_example import get_engine_for_db1_clone
+    except ImportError:
+        return _load_volume_from_yfinance(
+            primary_ids,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
+    try:
+        from sqlalchemy import text
+
+        # Generic schema: one row per (fsym_id, price_date) with volume and OHLC.
         sql = text(
-            """
+            f"""
             SELECT
                 fsym_id,
-                pricedate AS volume_date,
-                SUM(COALESCE(comp_volume, exchg_volume, 0)) AS volume,
+                price_date AS volume_date,
+                SUM(COALESCE(volume, 0)) AS volume,
                 AVG(price) AS db_price,
                 MAX(high_price) AS high_price,
                 MIN(low_price) AS low_price
-            FROM mapping.merq_prices
+            FROM {PRICE_TABLE}
             WHERE fsym_id IN :fsym_ids
-            GROUP BY fsym_id, pricedate
+            GROUP BY fsym_id, price_date
             """
         )
         with get_engine_for_db1_clone().connect() as conn:
@@ -971,7 +987,7 @@ def load_merged_panel(
         df = pd.read_parquet(STEP1_EXTENDED_PARQUET)
         df["date"] = pd.to_datetime(df["date"])
 
-    # Priority 2b: frozen step1 panel (original MerQube CSV/Excel snapshot).
+    # Priority 2b: frozen step1 panel (original vendor CSV/Excel snapshot).
     if df is None and STEP1_MERGED_PARQUET.exists():
         df = pd.read_parquet(STEP1_MERGED_PARQUET)
         df["date"] = pd.to_datetime(df["date"])

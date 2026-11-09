@@ -8,7 +8,7 @@ Pastor-Stambaugh proxy = rolling exposure to aggregate liquidity shocks
 
 Uses daily panel columns loaded in data_loader:
 - price
-- volume (from DB mapping.merq_prices)
+- volume (from the daily price table, see data_loader.load_volume)
 - high_price / low_price (for spread proxy)
 - ff_com_shs_out_secs
 """

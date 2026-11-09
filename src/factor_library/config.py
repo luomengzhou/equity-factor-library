@@ -19,11 +19,15 @@ DATA_DIR = APP_DIR / "data"
 
 # Excel + bundled parquet inputs
 FACTOR_LIBRARY_PATH = DATA_DIR / "preliminary_factor_library.xlsx"
-PART1_FILE = DATA_DIR / "MQ_top100_metrics_part1.xlsx"
-PART2_FILE = DATA_DIR / "MQ_top100_metrics_part2.xlsx"
+# Raw vendor export of the price panel (not distributed); generic file names.
+PART1_FILE = DATA_DIR / "metrics_part1.xlsx"
+PART2_FILE = DATA_DIR / "metrics_part2.xlsx"
 RF_DTB3_XLSX_PATH = DATA_DIR / "DTB3.xlsx"
 
-# Frozen MerQube panel (original CSV/Excel → parquet, ends 2026-02-02).
+# Frozen vendor panel (original CSV/Excel → parquet, ends 2026-02-02).
+# Daily price table used by the optional DB volume loader; internal name is
+# supplied via env rather than hard-coded.
+PRICE_TABLE = os.environ.get("FACTOR_LIB_PRICE_TABLE", "prices")
 STEP1_MERGED_PARQUET   = DATA_DIR / "step1_merged_data.parquet"
 # Extended panel: original + yfinance-pulled rows for dates after the
 # frozen file's last date. Written by scripts/refresh_prices_yfinance.py.

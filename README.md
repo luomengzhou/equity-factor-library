@@ -1,9 +1,9 @@
 # Equity Factor Library
 
-A research library for building and stress-testing equity factors, written for my Columbia MSBA capstone with MerQube (an index provider). It turns raw price and fundamental panels into 12 cross-sectional factor composites. It then puts each factor through the same validation stack: IC decay, quantile monotonicity, transaction costs, out-of-sample splits, regime conditioning, concentration checks, and multi-factor ensembles.
+A research library for building and stress-testing equity factors, written for my Columbia MSBA capstone with an index-provider partner. It turns raw price and fundamental panels into 12 cross-sectional factor composites. It then puts each factor through the same validation stack: IC decay, quantile monotonicity, transaction costs, out-of-sample splits, regime conditioning, concentration checks, and multi-factor ensembles.
 
 > **What is in this repo:** the library and pipeline code (~11k lines of Python, all written by me).
-> **What is not:** the vendor data panels, MerQube's internal database helpers, and the result tables built from that data. The capstone results were produced on licensed data that I cannot redistribute, so this repo shows the design and the methodology. I'm happy to walk through the findings in conversation.
+> **What is not:** the vendor data panels, the partner's internal database helpers, and the result tables built from that data. The capstone results were produced on licensed data that I cannot redistribute, so this repo shows the design and the methodology. I'm happy to walk through the findings in conversation.
 
 ## Factors
 
@@ -101,6 +101,16 @@ and the factor-cache key.
 - The 90-day reporting lag is an approximation, not vendor "available-date" fields. It is applied when fundamentals are joined onto the daily panel by `data/loader.py`. When a pre-merged panel that already carries the `ff_*` columns is loaded, the loader trusts that panel's alignment and does not re-lag it, so the point-in-time guarantee is only as good as the panel construction.
 - Some fundamental signals are computed on the daily (as-of filled) panel rather than on the quarterly report sequence (`earnings_variability` rolling std, the Piotroski leverage-improvement check). Between report dates these are step functions, so they carry less information than their names suggest.
 - The code expects the panel schema of the original dataset. Running it on public data needs a small adapter for `data/loader.py` (`scripts/refresh_prices_yfinance.py` shows the price side).
+
+## Data
+
+The loader looks for its inputs under `data/` (override with `FACTOR_LIBRARY_APP_DIR`):
+
+- `metrics_part1.xlsx` / `metrics_part2.xlsx` — raw price panel plus a symbol-coverage sheet (vendor export, not distributed).
+- `step1_merged_data.parquet` — the frozen merged daily panel; `step1_merged_data_extended.parquet` is the same panel extended with yfinance rows by `scripts/refresh_prices_yfinance.py`.
+- `DTB3.xlsx` — 3-month T-bill rate for the risk-free leg.
+
+Fundamentals use FactSet-style `ff_*` field names (e.g. `ff_assets`, `ff_com_shs_out_secs`). Volume and point-in-time fundamentals were pulled through the partner's internal data-access helpers, which are not part of this repo; the loader imports them inside `try/except ImportError` and falls back to the local panel or yfinance when they are absent. The daily price table name is read from `FACTOR_LIB_PRICE_TABLE` (default `prices`) so the SQL in `data/loader.py` has no hard-coded internal schema.
 
 ## Stack
 
