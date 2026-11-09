@@ -1,6 +1,6 @@
 # Experiments — Apr 17 ad-hoc scratch
 
-One-off scripts used to explore factor parameters and validate pilot strategies before the broader refactor. Kept here for reproducibility of `results/best_params_v1.json`.
+One-off scripts used to explore factor parameters and validate pilot strategies before the broader refactor. They write to `experiments/results/`, which is not committed (it is derived from the licensed data panel).
 
 ## Scripts
 
@@ -12,7 +12,7 @@ One-off scripts used to explore factor parameters and validate pilot strategies 
 | `check_momentum.py` | Quick spot-check of the Momentum composite |
 | `check_vr_strategy.py` | Quick spot-check of the value-reversal strategy |
 
-## Results
+## Outputs (not committed)
 
 - `results/best_params_v1.json` — tuned parameters selected from `02_parameter_optimization.py`
 - `results/parameter_scan_v1.csv` — full sweep output (all 72 combos, ranked by Sharpe)
@@ -20,7 +20,7 @@ One-off scripts used to explore factor parameters and validate pilot strategies 
 
 ## Status
 
-These scripts now use repo-relative paths (portable across machines) but still contain duplicated ad-hoc back-test logic. In the next refactor pass, their reusable logic should be extracted into `src/factor_library/backtest/` (see project root README / plan).
+These scripts use repo-relative paths but still contain duplicated ad-hoc back-test logic; the reusable parts belong in `src/factor_library/backtest/`. They require the data panel under `data/` and the composites produced by `scripts/run_pipeline.py`.
 
 Not imported by the package. Run standalone:
 

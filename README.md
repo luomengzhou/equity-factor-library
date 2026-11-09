@@ -73,6 +73,20 @@ mom = get_factor(universe, "Momentum",
 | Framing | `run_benchmark_regression.py`, `run_beta_four_objects.py` | Is the "alpha" really alpha once you compare long/short to long-only and decompose beta? |
 | Robustness | `run_split_sample.py`, `experiments/` | Pre/post-2000 stability; parameter and variant sweeps |
 
+## Install and run
+
+```bash
+pip install -e .                      # installs the `factor_library` package from src/
+pytest                                # synthetic-data smoke tests (no vendor data needed)
+python scripts/run_pipeline.py        # needs the data panel under data/ (see Known limitations)
+python scripts/run_storyline.py --dry-run
+```
+
+The `tests/` folder checks the parts that do not need data: the point-in-time
+as-of merge (reporting lag applied, no cross-id contamination), that momentum
+uses only past prices, cross-sectional ranking / compositing, winsorisation,
+and the factor-cache key.
+
 ## Design choices worth noting
 
 - **Point-in-time fundamentals.** Fundamentals are merged with a configurable reporting lag (`FUNDAMENTAL_REPORT_LAG_DAYS`, default 90) before the as-of join, so no factor uses a number before it would have been public.
@@ -84,7 +98,8 @@ mom = get_factor(universe, "Momentum",
 ## Known limitations
 
 - Winsorisation bounds for derived signals are global (full-sample) quantiles. This is a mild look-ahead; rolling bounds would be stricter.
-- The 90-day reporting lag is an approximation, not vendor "available-date" fields.
+- The 90-day reporting lag is an approximation, not vendor "available-date" fields. It is applied when fundamentals are joined onto the daily panel by `data/loader.py`. When a pre-merged panel that already carries the `ff_*` columns is loaded, the loader trusts that panel's alignment and does not re-lag it, so the point-in-time guarantee is only as good as the panel construction.
+- Some fundamental signals are computed on the daily (as-of filled) panel rather than on the quarterly report sequence (`earnings_variability` rolling std, the Piotroski leverage-improvement check). Between report dates these are step functions, so they carry less information than their names suggest.
 - The code expects the panel schema of the original dataset. Running it on public data needs a small adapter for `data/loader.py` (`scripts/refresh_prices_yfinance.py` shows the price side).
 
 ## Stack
