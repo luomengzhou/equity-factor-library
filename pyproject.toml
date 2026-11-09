@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "equity-factor-library"
+version = "0.2.0"
+description = "Multi-factor US equity research library: 12 factor composites, IC decay, quantile and cost-aware long/short backtests, OOS, regime and vol-targeting analysis."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Luomeng Zhou" }]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"factor_library" = ["reports/templates/*.md"]
