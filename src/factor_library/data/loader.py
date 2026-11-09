@@ -297,8 +297,24 @@ def _merge_metric_asof(
     metric_df: pd.DataFrame,
     metric_date_col: str,
     value_cols: list[str],
+    *,
+    lag_days: int | None = None,
+    keep_asof_date_as: str | None = None,
 ) -> pd.DataFrame:
-    """As-of merge metric columns into daily panel by company."""
+    """As-of merge metric columns into daily panel by company.
+
+    Parameters
+    ----------
+    lag_days : days added to ``metric_date_col`` before the backward as-of join.
+        ``None`` (default) uses ``FUNDAMENTAL_REPORT_LAG_DAYS`` — the approximate
+        filing lag for fundamentals. Pass ``0`` for market data (volume, OHLC)
+        that is observable on its own date.
+    keep_asof_date_as : if given, the (lagged) as-of date that matched each
+        panel row is kept under this column name (e.g. ``asset_date``), so
+        report-sequence calculations downstream can group by it.
+    """
+    if lag_days is None:
+        lag_days = int(FUNDAMENTAL_REPORT_LAG_DAYS or 0)
     if panel.empty:
         return panel
     out = panel.copy()
@@ -311,10 +327,8 @@ def _merge_metric_asof(
     out["date"] = pd.to_datetime(out["date"], utc=False).astype("datetime64[ns]")
     metric_df = metric_df.copy()
     metric_df[metric_date_col] = pd.to_datetime(metric_df[metric_date_col], errors="coerce").astype("datetime64[ns]")
-    if FUNDAMENTAL_REPORT_LAG_DAYS:
-        metric_df[metric_date_col] = metric_df[metric_date_col] + pd.Timedelta(
-            days=int(FUNDAMENTAL_REPORT_LAG_DAYS)
-        )
+    if lag_days:
+        metric_df[metric_date_col] = metric_df[metric_date_col] + pd.Timedelta(days=int(lag_days))
     metric_df = metric_df.dropna(subset=[metric_date_col, "fsym_primary_listing_id"])
 
     present_value_cols = [c for c in value_cols if c in metric_df.columns]
@@ -333,11 +347,14 @@ def _merge_metric_asof(
 
     # Vectorized as-of merge: one grouped merge_asof over all ids at once
     # (replaces an O(n) python loop that was pathological for large universes).
-    # merge_asof requires both sides sorted on the 'on' key within each by-group.
-    out = out.sort_values(["fsym_primary_listing_id", "date"]).reset_index(drop=True)
+    # merge_asof requires both sides *globally* sorted on the 'on' key (not
+    # just within each by-group), otherwise pandas raises "left keys must be
+    # sorted". Sort by date first; the id/date order is restored on return.
+    out = out.sort_values(["date", "fsym_primary_listing_id"]).reset_index(drop=True)
     right = (
         metric_df.rename(columns={metric_date_col: "__asof_date"})
-        .sort_values(["fsym_primary_listing_id", "__asof_date"])
+        .sort_values(["__asof_date", "fsym_primary_listing_id"])
+        .reset_index(drop=True)
     )
     # Avoid x/y suffixes when a value column already exists in the panel:
     # stage incoming values under __new_ then combine_first to backfill NaNs.
@@ -359,6 +376,8 @@ def _merge_metric_asof(
             # Prefer freshly merged DB values; keep existing only where new is NaN.
             merged[c] = merged[nc].combine_first(merged[c]) if c in merged.columns else merged[nc]
             merged = merged.drop(columns=[nc], errors="ignore")
+    if keep_asof_date_as is not None and "__asof_date" in merged.columns:
+        merged[keep_asof_date_as] = merged["__asof_date"]
     merged = merged.drop(columns=["__asof_date"], errors="ignore")
     for c in value_cols:
         if c not in merged.columns:
@@ -654,7 +673,12 @@ def enrich_panel_with_db_metrics(
             continue
         keep = ["fsym_primary_listing_id", dcol] + present_cols
         raw = raw[keep].copy()
-        out = _merge_metric_asof(out, raw, dcol, present_cols)
+        # Market value (full_mv) is a daily market observable; fundamentals
+        # (ff_*) get the reporting lag.
+        out = _merge_metric_asof(
+            out, raw, dcol, present_cols,
+            lag_days=0 if tk == "mktcap" else None,
+        )
 
     # Normalize aliases after merge
     if "ff_entrpr_value" not in out.columns and "ff_entrpr_val" in out.columns:
@@ -683,11 +707,15 @@ def enrich_panel_with_db_metrics(
                 end_date=out["date"].max(),
             )
             if not vol.empty:
+                # Volume / OHLC are market data observable on their own date:
+                # no reporting lag (the fundamental lag would make liquidity
+                # metrics 90 days stale).
                 out = _merge_metric_asof(
                     out,
                     vol.rename(columns={"volume_date": "date"}),
                     "date",
                     ["volume", "db_price", "high_price", "low_price"],
+                    lag_days=0,
                 )
         except Exception as e:
             warnings.warn(f"DB load volume failed: {e}", UserWarning, stacklevel=2)
@@ -767,8 +795,8 @@ def _merge_asof_panel(
 ) -> pd.DataFrame:
     """Merge assets and shares via merge_asof (backward) by company."""
     out = df.copy()
-    out = _merge_metric_asof(out, df_assets, "asset_date", ["ff_assets"])
-    out = _merge_metric_asof(out, df_shares, "share_date", ["ff_com_shs_out_secs"])
+    out = _merge_metric_asof(out, df_assets, "asset_date", ["ff_assets"], keep_asof_date_as="asset_date")
+    out = _merge_metric_asof(out, df_shares, "share_date", ["ff_com_shs_out_secs"], keep_asof_date_as="share_date")
     if "asset_date" not in out.columns:
         out["asset_date"] = pd.NaT
     if "share_date" not in out.columns:
